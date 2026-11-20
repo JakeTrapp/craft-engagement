@@ -2,6 +2,7 @@
 
 namespace jtdev\craftengagement\variables;
 
+use jtdev\craftengagement\helpers\SecurityHelper;
 use jtdev\craftengagement\Plugin;
 use Twig\Markup;
 
@@ -14,6 +15,23 @@ class EngagementVariable
     public function registerDeferredAssets(): void
     {
         Plugin::getInstance()->twig->registerDeferredAssets();
+    }
+
+    /**
+     * Sanitize custom SVG markup (strips scripts, event handlers and other active content).
+     * Used by the widget templates; also handy for custom widget template overrides.
+     */
+    public function sanitizeSvg(mixed $svg): ?string
+    {
+        return SecurityHelper::sanitizeSvg($svg);
+    }
+
+    /**
+     * Return the value if it is a plain CSS color, otherwise an empty string.
+     */
+    public function sanitizeColor(mixed $color): string
+    {
+        return SecurityHelper::sanitizeColor($color);
     }
 
     /**

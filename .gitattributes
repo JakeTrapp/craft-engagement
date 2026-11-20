@@ -12,6 +12,12 @@ package.json export-ignore
 phpstan.neon export-ignore
 stubs/ export-ignore
 tests/ export-ignore
+testbench/ export-ignore
+.ddev/ export-ignore
+phpunit.xml.dist export-ignore
+playwright.config.ts export-ignore
+vendor/ export-ignore
+node_modules/ export-ignore
 
 # Auto-detect text files and perform LF normalization
 * text=auto

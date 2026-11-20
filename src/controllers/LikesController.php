@@ -5,6 +5,7 @@ namespace jtdev\craftengagement\controllers;
 use Craft;
 use craft\web\Controller;
 use jtdev\craftengagement\fields\LikesField;
+use jtdev\craftengagement\helpers\SecurityHelper;
 use jtdev\craftengagement\models\LikesAggregate;
 use jtdev\craftengagement\models\LikesVote;
 use jtdev\craftengagement\Plugin;
@@ -13,7 +14,6 @@ use Throwable;
 use yii\db\IntegrityException;
 use yii\web\BadRequestHttpException;
 use yii\web\ForbiddenHttpException;
-use yii\web\NotFoundHttpException;
 use yii\web\Response;
 
 /**
@@ -21,6 +21,8 @@ use yii\web\Response;
  */
 class LikesController extends Controller
 {
+    use ResolvesEngagementTarget;
+
     protected array|bool|int $allowAnonymous = ['cast-like'];
 
     /**
@@ -41,24 +43,14 @@ class LikesController extends Controller
 
         $request = Craft::$app->getRequest();
 
-        $elementId = (int)$request->getRequiredBodyParam('elementId');
-        $fieldId = (int)$request->getRequiredBodyParam('fieldId');
-        $siteId = (int)$request->getBodyParam('siteId', Craft::$app->getSites()->getCurrentSite()->id);
         $value = (int)$request->getRequiredBodyParam('value');
 
         if (!in_array($value, [-1, 1], true)) {
             throw new BadRequestHttpException('Like value must be 1 or -1.');
         }
 
-        $field = Craft::$app->getFields()->getFieldById($fieldId);
-        if (!$field instanceof LikesField) {
-            throw new BadRequestHttpException('Invalid likes field.');
-        }
-
-        $element = Craft::$app->getElements()->getElementById($elementId, null, $siteId);
-        if ($element === null) {
-            throw new NotFoundHttpException('Element not found.');
-        }
+        /** @var LikesField $field */
+        [$element, $field, $elementId, $fieldId, $siteId] = $this->resolveEngagementTarget(LikesField::class);
 
         /** @var mixed $fieldValue */
         $fieldValue = $element->getFieldValue($field->handle);
@@ -103,9 +95,7 @@ class LikesController extends Controller
             if (!$normalized->allowGuestInteractions) {
                 throw new ForbiddenHttpException('Guest likes are disabled for this field.');
             }
-            $session = Craft::$app->getSession();
-            $session->open();
-            $sessionId = $session->getId();
+            $sessionId = SecurityHelper::currentGuestToken();
         }
 
         $existingVote = $currentUser !== null
@@ -126,8 +116,12 @@ class LikesController extends Controller
             $dislikeCountDelta = 0;
 
             if ($existingVote !== null && (int)$existingVote->value === $value) {
-                $voteService->delete($existingVote->id);
-                if ($value === 1) {
+                // Only decrement when this request actually removed the row, so concurrent
+                // toggles cannot push the counters below the real number of votes.
+                $deleted = $voteService->delete($existingVote->id);
+                if (!$deleted) {
+                    $likeCountDelta = 0;
+                } elseif ($value === 1) {
                     $likeCountDelta = -1;
                 } else {
                     $dislikeCountDelta = -1;

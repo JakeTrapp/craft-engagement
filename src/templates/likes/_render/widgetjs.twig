@@ -15,6 +15,8 @@
   - label
   - craft.app.request.csrfToken
 #}
+{# Always hex-encode <, >, &, ' and " so editor-supplied text can never close the inline <script>. #}
+{% set jsJsonFlags = constant('JSON_HEX_TAG') b-or constant('JSON_HEX_AMP') b-or constant('JSON_HEX_APOS') b-or constant('JSON_HEX_QUOT') %}
 (() => {
   const root = document.querySelector('[data-engagement-likes][data-likes-uid="{{ widgetUid }}"]');
   if (!root) {
@@ -34,22 +36,22 @@
   let userVote = Number({{ widgetUserVote is not null ? widgetUserVote : 0 }});
   let likeCount = Number({{ widgetLikeCount }});
   let dislikeCount = Number({{ widgetDislikeCount }});
-  const headingTemplate = {{ widgetHeadingText|json_encode|raw }};
-  const likeTemplate = {{ widgetLikeText|json_encode|raw }};
-  const dislikeTemplate = {{ widgetDislikeText|json_encode|raw }};
-  const beforeLikeColor = {{ widgetBeforeLikeColor|json_encode|raw }};
-  const afterLikeColor = {{ widgetAfterLikeColor|json_encode|raw }};
-  const beforeDislikeColor = {{ widgetBeforeDislikeColor|json_encode|raw }};
-  const afterDislikeColor = {{ widgetAfterDislikeColor|json_encode|raw }};
-  const fieldName = {{ (label ?? '')|json_encode|raw }};
-  const likeFallbackLabel = {{ 'Like'|t('engagement')|json_encode|raw }};
-  const dislikeFallbackLabel = {{ 'Dislike'|t('engagement')|json_encode|raw }};
-  const voteUpdatedText = {{ 'Vote updated.'|t('engagement')|json_encode|raw }};
-  const voteErrorText = {{ 'Could not update vote right now.'|t('engagement')|json_encode|raw }};
+  const headingTemplate = {{ widgetHeadingText|json_encode(jsJsonFlags)|raw }};
+  const likeTemplate = {{ widgetLikeText|json_encode(jsJsonFlags)|raw }};
+  const dislikeTemplate = {{ widgetDislikeText|json_encode(jsJsonFlags)|raw }};
+  const beforeLikeColor = {{ widgetBeforeLikeColor|json_encode(jsJsonFlags)|raw }};
+  const afterLikeColor = {{ widgetAfterLikeColor|json_encode(jsJsonFlags)|raw }};
+  const beforeDislikeColor = {{ widgetBeforeDislikeColor|json_encode(jsJsonFlags)|raw }};
+  const afterDislikeColor = {{ widgetAfterDislikeColor|json_encode(jsJsonFlags)|raw }};
+  const fieldName = {{ (label ?? '')|json_encode(jsJsonFlags)|raw }};
+  const likeFallbackLabel = {{ 'Like'|t('engagement')|json_encode(jsJsonFlags)|raw }};
+  const dislikeFallbackLabel = {{ 'Dislike'|t('engagement')|json_encode(jsJsonFlags)|raw }};
+  const voteUpdatedText = {{ 'Vote updated.'|t('engagement')|json_encode(jsJsonFlags)|raw }};
+  const voteErrorText = {{ 'Could not update vote right now.'|t('engagement')|json_encode(jsJsonFlags)|raw }};
   const actionUrl = root.getAttribute('data-action-url');
   const loginUrl = root.getAttribute('data-login-url') || '/login';
   const guestInteractionMode = root.getAttribute('data-guest-interaction-mode') || 'message';
-  const guestInteractionMessageHtml = {{ (widgetGuestInteractionMessageHtml ?? '')|json_encode|raw }};
+  const guestInteractionMessageHtml = {{ (widgetGuestInteractionMessageHtml ?? '')|json_encode(jsJsonFlags)|raw }};
   const isLoggedIn = root.getAttribute('data-is-logged-in') === '1';
   const guestAllowed = root.getAttribute('data-guest-allowed') === '1';
   const elementId = Number(root.getAttribute('data-element-id'));
@@ -201,7 +203,7 @@
       messageEl.setAttribute('data-guest-inline-message', '1');
       messageEl.setAttribute('role', 'alert');
       messageEl.className = 'engagement-guest-message';
-      messageEl.innerHTML = guestInteractionMessageHtml || {{ 'Please log in or register to interact.'|t('engagement')|json_encode|raw }};
+      messageEl.innerHTML = guestInteractionMessageHtml || {{ 'Please log in or register to interact.'|t('engagement')|json_encode(jsJsonFlags)|raw }};
 
       const controls = root.querySelector('.engagement-likes-control');
       if (controls) {
@@ -230,7 +232,7 @@
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
-          'X-CSRF-Token': {{ craft.app.request.csrfToken|json_encode|raw }},
+          'X-CSRF-Token': {{ craft.app.request.csrfToken|json_encode(jsJsonFlags)|raw }},
         },
         body: JSON.stringify({ elementId, fieldId, siteId, value }),
       });

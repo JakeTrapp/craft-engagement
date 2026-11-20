@@ -16,7 +16,8 @@
   },
   "require-dev": {
     "craftcms/ecs": "dev-main",
-    "craftcms/phpstan": "dev-main"
+    "craftcms/phpstan": "dev-main",
+    "phpunit/phpunit": "^11.5"
   },
   "autoload": {
     "psr-4": {
@@ -32,7 +33,10 @@
   "scripts": {
     "check-cs": "ecs check --ansi",
     "fix-cs": "ecs check --ansi --fix",
-    "phpstan": "phpstan --memory-limit=1G"
+    "phpstan": "phpstan --memory-limit=1G",
+    "test:unit": "phpunit",
+    "test:integration": "tests/integration/run",
+    "test:browser": "npm run test:browser"
   },
   "config": {
     "sort-packages": true,
@@ -43,5 +47,25 @@
       "yiisoft/yii2-composer": true,
       "craftcms/plugin-installer": true
     }
+  },
+  "archive": {
+    "exclude": [
+      "/vendor",
+      "/node_modules",
+      "/.ddev",
+      "/testbench",
+      "/tests",
+      "/.env",
+      "/.env.*",
+      "/.phpunit.cache",
+      "/phpunit.xml.dist",
+      "/playwright.config.ts",
+      "/package.json",
+      "/package-lock.json",
+      "/composer.lock",
+      "/.DS_Store",
+      "/playwright-report",
+      "/test-results"
+    ]
   }
 }

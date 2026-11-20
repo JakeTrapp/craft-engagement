@@ -22,6 +22,22 @@ use yii\web\Response;
 
 class ModerationController extends Controller
 {
+    /**
+     * Moderation is a control panel-only feature. Without these checks any logged-in
+     * front-end user could reach these actions through `actions/engagement/moderation/*`.
+     */
+    public function beforeAction($action): bool
+    {
+        if (!parent::beforeAction($action)) {
+            return false;
+        }
+
+        $this->requireCpRequest();
+        $this->requirePermission('accessPlugin-engagement');
+
+        return true;
+    }
+
     public function actionIndex(string $tab = 'all'): Response
     {
         $tab = strtolower($tab);
@@ -218,6 +234,7 @@ class ModerationController extends Controller
     public function actionDeleteRows(string $type, int $id): Response
     {
         $this->requirePostRequest();
+        $this->requirePermission(Plugin::PERMISSION_DELETE_VOTES);
 
         $type = strtolower($type);
         if (!in_array($type, ['ratings', 'likes', 'favorites'], true)) {

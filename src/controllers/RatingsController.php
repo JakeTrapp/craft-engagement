@@ -5,6 +5,7 @@ namespace jtdev\craftengagement\controllers;
 use Craft;
 use craft\web\Controller;
 use jtdev\craftengagement\fields\RatingField;
+use jtdev\craftengagement\helpers\SecurityHelper;
 use jtdev\craftengagement\models\RatingAggregate;
 use jtdev\craftengagement\models\RatingVote;
 use jtdev\craftengagement\Plugin;
@@ -13,7 +14,6 @@ use Throwable;
 use yii\db\IntegrityException;
 use yii\web\BadRequestHttpException;
 use yii\web\ForbiddenHttpException;
-use yii\web\NotFoundHttpException;
 use yii\web\Response;
 
 /**
@@ -21,6 +21,8 @@ use yii\web\Response;
  */
 class RatingsController extends Controller
 {
+    use ResolvesEngagementTarget;
+
     protected array|bool|int $allowAnonymous = ['cast-rating'];
 
     /**
@@ -41,20 +43,10 @@ class RatingsController extends Controller
 
         $request = Craft::$app->getRequest();
 
-        $elementId = (int)$request->getRequiredBodyParam('elementId');
-        $fieldId = (int)$request->getRequiredBodyParam('fieldId');
-        $siteId = (int)$request->getBodyParam('siteId', Craft::$app->getSites()->getCurrentSite()->id);
         $ratingValue = (int)$request->getRequiredBodyParam('rating');
 
-        $field = Craft::$app->getFields()->getFieldById($fieldId);
-        if (!$field instanceof RatingField) {
-            throw new BadRequestHttpException('Invalid rating field.');
-        }
-
-        $element = Craft::$app->getElements()->getElementById($elementId, null, $siteId);
-        if ($element === null) {
-            throw new NotFoundHttpException('Element not found.');
-        }
+        /** @var RatingField $field */
+        [$element, $field, $elementId, $fieldId, $siteId] = $this->resolveEngagementTarget(RatingField::class);
 
         /** @var mixed $fieldValue */
         $fieldValue = $element->getFieldValue($field->handle);
@@ -109,9 +101,7 @@ class RatingsController extends Controller
                 throw new ForbiddenHttpException('Guest ratings are disabled for this field.');
             }
 
-            $session = Craft::$app->getSession();
-            $session->open();
-            $sessionId = (string)$session->getId();
+            $sessionId = SecurityHelper::currentGuestToken();
             $existingVote = $voteService->getByAggregateAndSessionId($aggregate->id, $sessionId);
         }
 

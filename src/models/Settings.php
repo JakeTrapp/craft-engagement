@@ -30,6 +30,9 @@ class Settings extends Model
             [['loginUrl'], 'required'],
             [['guestInteractionMode'], 'required'],
             [['loginUrl', 'loginRedirectParam', 'guestInteractionMode', 'guestInteractionMessage'], 'string'],
+            // Only site-relative paths or http(s) URLs; blocks javascript:, data: and protocol-relative values.
+            [['loginUrl'], 'match', 'pattern' => '#^(?:https?://[^\s]+|/?(?!/)[^\s:]*)$#i', 'message' => 'Login URL must be a relative path or an http(s) URL.'],
+            [['loginRedirectParam'], 'match', 'pattern' => '/^[A-Za-z0-9_\-\[\]]*$/', 'message' => 'Redirect parameter may only contain letters, numbers, dashes, underscores and brackets.'],
             [['guestInteractionMode'], 'in', 'range' => [
                 self::GUEST_INTERACTION_MODE_MESSAGE,
                 self::GUEST_INTERACTION_MODE_REDIRECT,

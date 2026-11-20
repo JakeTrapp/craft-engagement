@@ -25,7 +25,8 @@
 {% set widgetDisplayAverage = ((widgetAverage * 4)|round) / 4 %}
 {% set widgetIcon = icon ?? 'star' %}
 {% set widgetEmojiIcon = emojiIcon ?? '⭐' %}
-{% set widgetCustomSvg = customSvg ?? null %}
+{% set widgetCustomSvg = craft.engagement.sanitizeSvg(customSvg ?? null) %}
+{% set customSvg = widgetCustomSvg %}
 {% set widgetIsLoggedIn = isLoggedIn ?? false %}
 {% set widgetGuestAllowed = guestAllowed ?? false %}
 {% set widgetUserRating = userRating ?? null %}

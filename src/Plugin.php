@@ -8,7 +8,9 @@ use craft\base\Plugin as BasePlugin;
 use craft\elements\db\ElementQuery;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
+use craft\events\RegisterUserPermissionsEvent;
 use craft\services\Fields;
+use craft\services\UserPermissions;
 use craft\web\twig\variables\CraftVariable;
 use craft\web\UrlManager;
 use jtdev\craftengagement\fields\FavoritesField;
@@ -48,7 +50,9 @@ use yii\base\Event;
  */
 class Plugin extends BasePlugin
 {
-    public string $schemaVersion = '1.0.0';
+    public const PERMISSION_DELETE_VOTES = 'engagement-deleteVotes';
+
+    public string $schemaVersion = '1.0.1';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -140,6 +144,21 @@ class Plugin extends BasePlugin
                 /** @var ElementQuery $query */
                 $query = $event->sender;
                 EngagementQueryHelper::rewriteOrderBy($query);
+            }
+        );
+
+        Event::on(
+            UserPermissions::class,
+            UserPermissions::EVENT_REGISTER_PERMISSIONS,
+            static function(RegisterUserPermissionsEvent $event): void {
+                $event->permissions[] = [
+                    'heading' => Craft::t('engagement', 'Engagement'),
+                    'permissions' => [
+                        self::PERMISSION_DELETE_VOTES => [
+                            'label' => Craft::t('engagement', 'Delete ratings, likes and favorites from moderation'),
+                        ],
+                    ],
+                ];
             }
         );
 
