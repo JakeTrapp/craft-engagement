@@ -144,6 +144,7 @@
     </section>
 
     <section class="eng-index-shell">
+      {% set canDelete = currentUser.can('engagement-deleteVotes') %}
       <form method="post" action="{{ cpUrl('engagement/moderation/' ~ type ~ '/' ~ aggregate.id ~ '/delete') }}" data-eng-delete-form="1">
         {{ csrfInput() }}
         {{ redirectInput(cpUrl('engagement/moderation/' ~ type ~ '/' ~ aggregate.id)) }}
@@ -156,15 +157,19 @@
               {{ 'Votes'|t('engagement') }}
             {% endif %}
           </strong>
-          <button class="btn submit disabled" type="submit" data-eng-delete-btn disabled>{{ 'Delete Selected'|t('engagement') }}</button>
-          <span class="light" data-eng-selected-count>{{ '0 selected'|t('engagement') }}</span>
+          {% if canDelete %}
+            <button class="btn submit disabled" type="submit" data-eng-delete-btn disabled>{{ 'Delete Selected'|t('engagement') }}</button>
+            <span class="light" data-eng-selected-count>{{ '0 selected'|t('engagement') }}</span>
+          {% endif %}
         </div>
 
         <div class="eng-tablepane">
           <table class="data fullwidth">
             <thead>
               <tr>
-                <th class="thin"><input type="checkbox" data-eng-select-all aria-label="{{ 'Select all rows'|t('engagement') }}"></th>
+                {% if canDelete %}
+                  <th class="thin"><input type="checkbox" data-eng-select-all aria-label="{{ 'Select all rows'|t('engagement') }}"></th>
+                {% endif %}
                 <th>ID</th>
                 {% if type == 'ratings' %}
                   <th>{{ 'Rating'|t('engagement') }}</th>
@@ -179,7 +184,9 @@
             <tbody>
               {% for row in rows %}
                 <tr>
-                  <td><input type="checkbox" name="rowIds[]" value="{{ row.id }}" data-eng-row-checkbox></td>
+                  {% if canDelete %}
+                    <td><input type="checkbox" name="rowIds[]" value="{{ row.id }}" data-eng-row-checkbox></td>
+                  {% endif %}
                   <td>{{ row.id }}</td>
                   {% if type == 'ratings' %}
                     <td>{{ row.rating }}</td>
@@ -196,12 +203,13 @@
                       <span class="light">{{ 'Guest'|t('engagement') }}</span>
                     {% endif %}
                   </td>
-                  <td><span class="code">{{ row.sessionId ?: '—' }}</span></td>
+                  {# Guest identifiers are stored as HMACs; show a short prefix only. #}
+                  <td><span class="code" title="{{ row.sessionId }}">{{ row.sessionId ? row.sessionId|slice(0, 12) ~ '…' : '—' }}</span></td>
                   <td>{{ row.dateCreated|datetime('short') }}</td>
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="{{ type == 'favorites' ? 5 : 6 }}">
+                  <td colspan="{{ (type == 'favorites' ? 4 : 5) + (canDelete ? 1 : 0) }}">
                     <span class="light">{{ 'No rows found.'|t('engagement') }}</span>
                   </td>
                 </tr>

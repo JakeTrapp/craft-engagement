@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Mark an existing db_test once, after confirming it is the disposable test database.
+set -euo pipefail
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_dir"
+testbench/bin/materialize
+ddev exec -d /var/www/html/testbench php bin/mark-test-database.php

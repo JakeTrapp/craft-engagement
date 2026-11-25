@@ -5,3 +5,17 @@
 .env
 /node_modules
 /vendor
+/.ddev/
+/.phpunit.cache/
+/playwright-report/
+/test-results/
+tests/browser/artifacts/
+/testbench/*
+!/testbench/README.md
+!/testbench/bin/
+/testbench/bin/*
+!/testbench/bin/materialize
+!/testbench/bin/test-integration
+!/testbench/bin/mark-test-database
+/composer.lock
+/docs/

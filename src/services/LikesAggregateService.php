@@ -2,6 +2,7 @@
 
 namespace jtdev\craftengagement\services;
 
+use Craft;
 use craft\base\Component;
 use jtdev\craftengagement\models\LikesAggregate;
 use jtdev\craftengagement\Plugin;
@@ -157,27 +158,31 @@ class LikesAggregateService extends Component
 
     public function forceRecount(int $aggregateId): ?LikesAggregate
     {
-        $aggregate = $this->getById($aggregateId);
-        if ($aggregate === null) {
-            return null;
-        }
-
-        $votes = Plugin::getInstance()->likesVotes->getByAggregateId($aggregateId);
-        $likeCount = 0;
-        $dislikeCount = 0;
-
-        foreach ($votes as $vote) {
-            if ((int)$vote->value === 1) {
-                $likeCount++;
-            } elseif ((int)$vote->value === -1) {
-                $dislikeCount++;
+        $db = Craft::$app->getDb();
+        return $db->transaction(function() use ($db, $aggregateId): ?LikesAggregate {
+            $db->createCommand('SELECT [[id]] FROM ' . $db->quoteTableName(LikesAggregateRecord::tableName()) . ' WHERE [[id]] = :id FOR UPDATE', [':id' => $aggregateId])->queryScalar();
+            $aggregate = $this->getById($aggregateId);
+            if ($aggregate === null) {
+                return null;
             }
-        }
 
-        return $this->update($aggregateId, [
-            'likeCount' => $likeCount,
-            'dislikeCount' => $dislikeCount,
-        ]);
+            $votes = Plugin::getInstance()->likesVotes->getByAggregateId($aggregateId);
+            $likeCount = 0;
+            $dislikeCount = 0;
+
+            foreach ($votes as $vote) {
+                if ((int)$vote->value === 1) {
+                    $likeCount++;
+                } elseif ((int)$vote->value === -1) {
+                    $dislikeCount++;
+                }
+            }
+
+            return $this->update($aggregateId, [
+                'likeCount' => $likeCount,
+                'dislikeCount' => $dislikeCount,
+            ]);
+        });
     }
 
     private function recordToModel(LikesAggregateRecord $record): LikesAggregate

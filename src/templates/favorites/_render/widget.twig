@@ -31,11 +31,14 @@
 {% set widgetFavoriteCount = favoriteCount ?? 0 %}
 {% set widgetIcon = icon ?? 'heart' %}
 {% set widgetEmojiIcon = emojiIcon ?? '⭐' %}
-{% set widgetBeforeFavoriteColor = beforeFavoriteColor ?? '' %}
-{% set widgetAfterFavoriteColor = afterFavoriteColor ?? '' %}
+{% set widgetBeforeFavoriteColor = craft.engagement.sanitizeColor(beforeFavoriteColor ?? '') %}
+{% set beforeFavoriteColor = widgetBeforeFavoriteColor %}
+{% set widgetAfterFavoriteColor = craft.engagement.sanitizeColor(afterFavoriteColor ?? '') %}
+{% set afterFavoriteColor = widgetAfterFavoriteColor %}
 {% set widgetFavoriteBeforeBg = widgetBeforeFavoriteColor ?: '#fff' %}
 {% set widgetFavoriteAfterBg = widgetAfterFavoriteColor ?: '#fff' %}
-{% set widgetCustomSvg = customSvg ?? null %}
+{% set widgetCustomSvg = craft.engagement.sanitizeSvg(customSvg ?? null) %}
+{% set customSvg = widgetCustomSvg %}
 {% set widgetHeadingText = headingText ?? '' %}
 {% set widgetFavoriteText = favoriteText ?? '' %}
 {% set widgetUnfavoriteText = unfavoriteText ?? '' %}

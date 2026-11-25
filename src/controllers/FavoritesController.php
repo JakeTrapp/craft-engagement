@@ -5,6 +5,7 @@ namespace jtdev\craftengagement\controllers;
 use Craft;
 use craft\web\Controller;
 use jtdev\craftengagement\fields\FavoritesField;
+use jtdev\craftengagement\helpers\SecurityHelper;
 use jtdev\craftengagement\models\FavoritesAggregate;
 use jtdev\craftengagement\models\FavoritesEntry;
 use jtdev\craftengagement\Plugin;
@@ -13,7 +14,6 @@ use Throwable;
 use yii\db\IntegrityException;
 use yii\web\BadRequestHttpException;
 use yii\web\ForbiddenHttpException;
-use yii\web\NotFoundHttpException;
 use yii\web\Response;
 
 /**
@@ -21,6 +21,8 @@ use yii\web\Response;
  */
 class FavoritesController extends Controller
 {
+    use ResolvesEngagementTarget;
+
     protected array|bool|int $allowAnonymous = ['toggle-favorite'];
 
     /**
@@ -31,21 +33,8 @@ class FavoritesController extends Controller
         $this->requirePostRequest();
         $this->requireAcceptsJson();
 
-        $request = Craft::$app->getRequest();
-
-        $elementId = (int)$request->getRequiredBodyParam('elementId');
-        $fieldId = (int)$request->getRequiredBodyParam('fieldId');
-        $siteId = (int)$request->getBodyParam('siteId', Craft::$app->getSites()->getCurrentSite()->id);
-
-        $field = Craft::$app->getFields()->getFieldById($fieldId);
-        if (!$field instanceof FavoritesField) {
-            throw new BadRequestHttpException('Invalid favorites field.');
-        }
-
-        $element = Craft::$app->getElements()->getElementById($elementId, null, $siteId);
-        if ($element === null) {
-            throw new NotFoundHttpException('Element not found.');
-        }
+        /** @var FavoritesField $field */
+        [$element, $field, $elementId, $fieldId, $siteId] = $this->resolveEngagementTarget(FavoritesField::class);
 
         /** @var mixed $fieldValue */
         $fieldValue = $element->getFieldValue($field->handle);
@@ -89,27 +78,29 @@ class FavoritesController extends Controller
             if (!$normalized->allowGuestInteractions) {
                 throw new ForbiddenHttpException('Guest favorites are disabled for this field.');
             }
-            $session = Craft::$app->getSession();
-            $session->open();
-            $sessionId = $session->getId();
+            $sessionId = SecurityHelper::currentGuestToken();
         }
-
-        $existingEntry = $currentUser !== null
-            ? $entryService->getByAggregateAndUserId($aggregate->id, (int)$currentUser->id)
-            : $entryService->getByAggregateAndSessionId($aggregate->id, (string)$sessionId);
 
         $db = Craft::$app->getDb();
         $transaction = $db->beginTransaction();
 
         try {
+            // Serialize mutations before reading the previous vote; stale reads can
+            // otherwise apply the same rating/like delta more than once.
+            $db->createCommand('SELECT [[id]] FROM ' . $db->quoteTableName(FavoritesAggregateRecord::tableName()) . ' WHERE [[id]] = :id FOR UPDATE', [':id' => $aggregate->id])->queryScalar();
+            $existingEntry = $currentUser !== null
+                ? $entryService->getByAggregateAndUserId($aggregate->id, (int)$currentUser->id)
+                : $entryService->getByAggregateAndSessionId($aggregate->id, (string)$sessionId);
+
             $savedEntry = null;
             $isFavorited = false;
             $favoriteCountDelta = 0;
 
             if ($existingEntry !== null) {
-                $entryService->delete($existingEntry->id);
+                // Only decrement when this request actually removed the row, so concurrent
+                // toggles cannot push the counter below the real number of favorites.
                 $isFavorited = false;
-                $favoriteCountDelta = -1;
+                $favoriteCountDelta = $entryService->delete($existingEntry->id) ? -1 : 0;
             } else {
                 try {
                     $savedEntry = $entryService->add(new FavoritesEntry([

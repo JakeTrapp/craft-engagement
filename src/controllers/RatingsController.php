@@ -5,6 +5,7 @@ namespace jtdev\craftengagement\controllers;
 use Craft;
 use craft\web\Controller;
 use jtdev\craftengagement\fields\RatingField;
+use jtdev\craftengagement\helpers\SecurityHelper;
 use jtdev\craftengagement\models\RatingAggregate;
 use jtdev\craftengagement\models\RatingVote;
 use jtdev\craftengagement\Plugin;
@@ -13,7 +14,6 @@ use Throwable;
 use yii\db\IntegrityException;
 use yii\web\BadRequestHttpException;
 use yii\web\ForbiddenHttpException;
-use yii\web\NotFoundHttpException;
 use yii\web\Response;
 
 /**
@@ -21,6 +21,8 @@ use yii\web\Response;
  */
 class RatingsController extends Controller
 {
+    use ResolvesEngagementTarget;
+
     protected array|bool|int $allowAnonymous = ['cast-rating'];
 
     /**
@@ -41,20 +43,10 @@ class RatingsController extends Controller
 
         $request = Craft::$app->getRequest();
 
-        $elementId = (int)$request->getRequiredBodyParam('elementId');
-        $fieldId = (int)$request->getRequiredBodyParam('fieldId');
-        $siteId = (int)$request->getBodyParam('siteId', Craft::$app->getSites()->getCurrentSite()->id);
         $ratingValue = (int)$request->getRequiredBodyParam('rating');
 
-        $field = Craft::$app->getFields()->getFieldById($fieldId);
-        if (!$field instanceof RatingField) {
-            throw new BadRequestHttpException('Invalid rating field.');
-        }
-
-        $element = Craft::$app->getElements()->getElementById($elementId, null, $siteId);
-        if ($element === null) {
-            throw new NotFoundHttpException('Element not found.');
-        }
+        /** @var RatingField $field */
+        [$element, $field, $elementId, $fieldId, $siteId] = $this->resolveEngagementTarget(RatingField::class);
 
         /** @var mixed $fieldValue */
         $fieldValue = $element->getFieldValue($field->handle);
@@ -99,24 +91,12 @@ class RatingsController extends Controller
         }
 
         $currentUser = Craft::$app->getUser()->getIdentity();
-        $existingVote = null;
         $sessionId = null;
-
-        if ($currentUser !== null) {
-            $existingVote = $voteService->getByAggregateAndUserId($aggregate->id, (int)$currentUser->id);
-        } else {
+        if ($currentUser === null) {
             if (!$normalized->allowGuestRatings) {
                 throw new ForbiddenHttpException('Guest ratings are disabled for this field.');
             }
-
-            $session = Craft::$app->getSession();
-            $session->open();
-            $sessionId = (string)$session->getId();
-            $existingVote = $voteService->getByAggregateAndSessionId($aggregate->id, $sessionId);
-        }
-
-        if ($existingVote !== null && !$normalized->allowUserRatingChange) {
-            throw new ForbiddenHttpException('Changing an existing rating is disabled for this field.');
+            $sessionId = SecurityHelper::currentGuestToken();
         }
 
         $savedVote = null;
@@ -124,6 +104,16 @@ class RatingsController extends Controller
         $transaction = $db->beginTransaction();
 
         try {
+            // Serialize mutations before reading the previous vote; stale reads can
+            // otherwise apply the same rating/like delta more than once.
+            $db->createCommand('SELECT [[id]] FROM ' . $db->quoteTableName(RatingAggregateRecord::tableName()) . ' WHERE [[id]] = :id FOR UPDATE', [':id' => $aggregate->id])->queryScalar();
+            $existingVote = $currentUser !== null
+                ? $voteService->getByAggregateAndUserId($aggregate->id, (int)$currentUser->id)
+                : $voteService->getByAggregateAndSessionId($aggregate->id, (string)$sessionId);
+            if ($existingVote !== null && !$normalized->allowUserRatingChange) {
+                throw new ForbiddenHttpException('Changing an existing rating is disabled for this field.');
+            }
+
             $voteCountDelta = 0;
             $ratingSumDelta = 0;
 

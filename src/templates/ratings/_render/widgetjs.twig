@@ -14,6 +14,8 @@
   - label
   - craft.app.request.csrfToken
 #}
+{# Always hex-encode <, >, &, ' and " so editor-supplied text can never close the inline <script>. #}
+{% set jsJsonFlags = constant('JSON_HEX_TAG') b-or constant('JSON_HEX_AMP') b-or constant('JSON_HEX_APOS') b-or constant('JSON_HEX_QUOT') %}
 (() => {
   const root = document.querySelector('[data-engagement-rating][data-rating-uid="{{ widgetUid }}"]');
   if (!root) {
@@ -31,23 +33,23 @@
   const actionUrl = root.getAttribute('data-action-url');
   const loginUrl = root.getAttribute('data-login-url') || '/login';
   const guestInteractionMode = root.getAttribute('data-guest-interaction-mode') || 'message';
-  const guestInteractionMessageHtml = {{ (widgetGuestInteractionMessageHtml ?? '')|json_encode|raw }};
+  const guestInteractionMessageHtml = {{ (widgetGuestInteractionMessageHtml ?? '')|json_encode(jsJsonFlags)|raw }};
   const isLoggedIn = root.getAttribute('data-is-logged-in') === '1';
   const guestAllowed = root.getAttribute('data-guest-allowed') === '1';
   const elementId = Number(root.getAttribute('data-element-id'));
   const fieldId = Number(root.getAttribute('data-field-id'));
   const siteId = Number(root.getAttribute('data-site-id'));
-  const fieldName = {{ (label ?? '')|json_encode|raw }};
-  const ratingUpdatedText = {{ 'Rating updated.'|t('engagement')|json_encode|raw }};
-  const ratingErrorText = {{ 'Could not submit rating right now.'|t('engagement')|json_encode|raw }};
+  const fieldName = {{ (label ?? '')|json_encode(jsJsonFlags)|raw }};
+  const ratingUpdatedText = {{ 'Rating updated.'|t('engagement')|json_encode(jsJsonFlags)|raw }};
+  const ratingErrorText = {{ 'Could not submit rating right now.'|t('engagement')|json_encode(jsJsonFlags)|raw }};
 
   let selected = Number({{ widgetUserRating is not null ? widgetUserRating : 0 }});
-  const headingTemplate = {{ (widgetHeadingText ?? '')|json_encode|raw }};
-  const clickTemplate = {{ (widgetClickToRateText ?? '')|json_encode|raw }};
-  const yourTemplate = {{ (widgetYourRatingText ?? '')|json_encode|raw }};
-  const initialAverage = Number({{ widgetAverage|json_encode|raw }});
-  const initialRoundedAverage = Number({{ widgetDisplayAverage|json_encode|raw }});
-  const initialVotes = Number({{ (voteCount ?? 0)|json_encode|raw }});
+  const headingTemplate = {{ (widgetHeadingText ?? '')|json_encode(jsJsonFlags)|raw }};
+  const clickTemplate = {{ (widgetClickToRateText ?? '')|json_encode(jsJsonFlags)|raw }};
+  const yourTemplate = {{ (widgetYourRatingText ?? '')|json_encode(jsJsonFlags)|raw }};
+  const initialAverage = Number({{ widgetAverage|json_encode(jsJsonFlags)|raw }});
+  const initialRoundedAverage = Number({{ widgetDisplayAverage|json_encode(jsJsonFlags)|raw }});
+  const initialVotes = Number({{ (voteCount ?? 0)|json_encode(jsJsonFlags)|raw }});
 
   const formatText = (template, extra = {}) => {
     if (!template || !template.trim()) {
@@ -121,7 +123,7 @@
       messageEl.setAttribute('data-guest-inline-message', '1');
       messageEl.setAttribute('role', 'alert');
       messageEl.className = 'engagement-guest-message';
-      messageEl.innerHTML = guestInteractionMessageHtml || {{ 'Please log in or register to interact.'|t('engagement')|json_encode|raw }};
+      messageEl.innerHTML = guestInteractionMessageHtml || {{ 'Please log in or register to interact.'|t('engagement')|json_encode(jsJsonFlags)|raw }};
 
       if (overallWrapEl) {
         overallWrapEl.replaceWith(messageEl);
@@ -169,7 +171,7 @@
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            'X-CSRF-Token': {{ craft.app.request.csrfToken|json_encode|raw }},
+            'X-CSRF-Token': {{ craft.app.request.csrfToken|json_encode(jsJsonFlags)|raw }},
           },
           body: JSON.stringify({ elementId, fieldId, siteId, rating: value }),
         });

@@ -1,0 +1,35 @@
+name: engagement-security-tests
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: db
+      MYSQL_USER: db
+      MYSQL_PASSWORD: db
+    healthcheck:
+      test: [CMD, mysqladmin, ping, -h, localhost, -proot]
+      interval: 2s
+      retries: 60
+  php:
+    build: .
+    working_dir: /workspace
+    volumes:
+      - ../..:/workspace
+    ports:
+      - "127.0.0.1:${ENGAGEMENT_BROWSER_PORT:-8098}:8098"
+    environment:
+      DDEV_PROJECT: craft-engagement-testbench
+      CRAFT_ENVIRONMENT: dev
+      CRAFT_DB_SERVER: db
+      CRAFT_DB_DATABASE: db
+      CRAFT_DB_USER: db
+      CRAFT_DB_PASSWORD: db
+      CRAFT_TEST_DB_DATABASE: db_test
+      ENGAGEMENT_TEST_DB_IDENTITY: craft-engagement-testbench:db_test
+      CRAFT_SECURITY_KEY: engagement-testbench-not-for-production
+      PRIMARY_SITE_URL: http://127.0.0.1:${ENGAGEMENT_BROWSER_PORT:-8098}
+    command: [sleep, infinity]
+    depends_on:
+      db:
+        condition: service_healthy

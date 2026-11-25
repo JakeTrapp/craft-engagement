@@ -22,6 +22,22 @@ use yii\web\Response;
 
 class ModerationController extends Controller
 {
+    /**
+     * Moderation is a control panel-only feature. Without these checks any logged-in
+     * front-end user could reach these actions through `actions/engagement/moderation/*`.
+     */
+    public function beforeAction($action): bool
+    {
+        if (!parent::beforeAction($action)) {
+            return false;
+        }
+
+        $this->requireCpRequest();
+        $this->requirePermission('accessPlugin-engagement');
+
+        return true;
+    }
+
     public function actionIndex(string $tab = 'all'): Response
     {
         $tab = strtolower($tab);
@@ -218,6 +234,7 @@ class ModerationController extends Controller
     public function actionDeleteRows(string $type, int $id): Response
     {
         $this->requirePostRequest();
+        $this->requirePermission(Plugin::PERMISSION_DELETE_VOTES);
 
         $type = strtolower($type);
         if (!in_array($type, ['ratings', 'likes', 'favorites'], true)) {
@@ -234,17 +251,27 @@ class ModerationController extends Controller
             return $this->redirectToPostedUrl();
         }
 
-        $deleted = 0;
-        if ($type === 'ratings') {
-            $deleted = RatingVoteRecord::deleteAll(['id' => $rowIds, 'aggregateId' => $id]);
-            Plugin::getInstance()->ratingAggregates->forceRecount($id);
-        } elseif ($type === 'likes') {
-            $deleted = LikesVoteRecord::deleteAll(['id' => $rowIds, 'aggregateId' => $id]);
-            Plugin::getInstance()->likesAggregates->forceRecount($id);
-        } else {
-            $deleted = FavoritesEntryRecord::deleteAll(['id' => $rowIds, 'aggregateId' => $id]);
-            Plugin::getInstance()->favoritesAggregates->forceRecount($id);
-        }
+        $db = Craft::$app->getDb();
+        $deleted = $db->transaction(function() use ($db, $type, $id, $rowIds): int {
+            $table = match ($type) {
+                'ratings' => RatingAggregateRecord::tableName(),
+                'likes' => LikesAggregateRecord::tableName(),
+                'favorites' => FavoritesAggregateRecord::tableName(),
+            };
+            $db->createCommand('SELECT [[id]] FROM ' . $db->quoteTableName($table) . ' WHERE [[id]] = :id FOR UPDATE', [':id' => $id])->queryScalar();
+            if ($type === 'ratings') {
+                $deleted = RatingVoteRecord::deleteAll(['id' => $rowIds, 'aggregateId' => $id]);
+                Plugin::getInstance()->ratingAggregates->forceRecount($id);
+            } elseif ($type === 'likes') {
+                $deleted = LikesVoteRecord::deleteAll(['id' => $rowIds, 'aggregateId' => $id]);
+                Plugin::getInstance()->likesAggregates->forceRecount($id);
+            } else {
+                $deleted = FavoritesEntryRecord::deleteAll(['id' => $rowIds, 'aggregateId' => $id]);
+                Plugin::getInstance()->favoritesAggregates->forceRecount($id);
+            }
+
+            return $deleted;
+        });
 
         if ($deleted > 0) {
             Craft::$app->getSession()->setNotice(Craft::t('engagement', '{count} rows deleted.', ['count' => $deleted]));

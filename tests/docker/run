@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Docker-only alternative to DDEV; never connects to the site's database.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+compose=(docker compose -f tests/docker/compose.yaml)
+case "${1:-}" in
+  start) "${compose[@]}" up -d --wait ;;
+  stop) "${compose[@]}" down ;;
+  php) shift; exec "${compose[@]}" exec -T -w /workspace/testbench php php "$@" ;;
+  root) shift; exec "${compose[@]}" exec -T php "$@" ;;
+  install) testbench/bin/materialize; "${compose[@]}" exec -T -w /workspace/testbench php composer install --no-interaction ;;
+  reset) "${compose[@]}" exec -T -w /workspace/testbench php php bin/create-test-database.php ;;
+  integration)
+    lock=testbench/.test-run.lock
+    mkdir -p testbench
+    mkdir "$lock" || { echo 'Another suite owns db_test; inspect testbench/.test-run.lock/owner.' >&2; exit 1; }
+    echo "docker integration pid $$" > "$lock/owner"
+    trap 'rm -f "$lock/owner"; rmdir "$lock"' EXIT
+    "$0" start
+    "$0" install
+    "$0" reset
+    "$0" php vendor/bin/codecept build
+    shift
+    "$0" php vendor/bin/codecept run integration "$@"
+    ;;
+  *) echo 'Usage: tests/docker/run {start|stop|install|reset|php|root|integration}' >&2; exit 2 ;;
+esac

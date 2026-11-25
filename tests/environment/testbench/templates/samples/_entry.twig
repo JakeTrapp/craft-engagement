@@ -1,0 +1,23 @@
+{# Front-end template used by the Playwright suite. `?mode=deferred` switches every widget to deferred rendering. #}
+{% set mode = craft.app.request.getQueryParam('mode') == 'deferred' ? 'deferred' : 'normal' %}
+{% if mode == 'deferred' %}
+  {% do craft.engagement.registerDeferredAssets() %}
+{% endif %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ entry.title }}</title>
+</head>
+<body>
+  <h1>{{ entry.title }}</h1>
+  {% set layout = entry.getFieldLayout() %}
+  {% for handle in ['engagementRating', 'engagementLikes', 'engagementFavorites', 'iconLikes'] %}
+    {% if layout and layout.getFieldByHandle(handle) %}
+      <section data-testid="{{ handle }}">
+        {{ craft.engagement.render(entry.getFieldValue(handle), { mode: mode }) }}
+      </section>
+    {% endif %}
+  {% endfor %}
+</body>
+</html>

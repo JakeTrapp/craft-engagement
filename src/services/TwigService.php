@@ -6,6 +6,7 @@ use Craft;
 use craft\base\Component;
 use craft\helpers\UrlHelper;
 use craft\web\View;
+use jtdev\craftengagement\helpers\SecurityHelper;
 use jtdev\craftengagement\models\Favorite;
 use jtdev\craftengagement\models\Like;
 use jtdev\craftengagement\models\Rating;
@@ -56,7 +57,7 @@ class TwigService extends Component
 
     public function renderRating(mixed $fieldValue, ?array $options = null): Markup|string
     {
-        $data = $this->normalizeRatingFieldData($fieldValue);
+        $data = $this->sanitizeWidgetData($this->normalizeRatingFieldDataRaw($fieldValue));
         if ($data === null || ($data['enabled'] ?? true) === false) {
             return '';
         }
@@ -73,9 +74,7 @@ class TwigService extends Component
                 $vote = Plugin::getInstance()->ratingVotes->getByAggregateAndUserId((int)$data['id'], (int)$currentUser->id);
                 $userRating = $vote?->rating;
             } elseif (($data['allowGuestRatings'] ?? false) === true) {
-                $session = Craft::$app->getSession();
-                $session->open();
-                $vote = Plugin::getInstance()->ratingVotes->getByAggregateAndSessionId((int)$data['id'], $session->getId());
+                $vote = Plugin::getInstance()->ratingVotes->getByAggregateAndSessionId((int)$data['id'], SecurityHelper::currentGuestToken());
                 $userRating = $vote?->rating;
             }
         }
@@ -124,7 +123,7 @@ class TwigService extends Component
 
     public function renderLikes(mixed $fieldValue, ?array $options = null): Markup|string
     {
-        $data = $this->normalizeLikesFieldData($fieldValue);
+        $data = $this->sanitizeWidgetData($this->normalizeLikesFieldDataRaw($fieldValue));
         if ($data === null || ($data['enabled'] ?? true) === false) {
             return '';
         }
@@ -139,9 +138,7 @@ class TwigService extends Component
                 $vote = Plugin::getInstance()->likesVotes->getByAggregateAndUserId((int)$data['id'], (int)$currentUser->id);
                 $userVote = $vote?->value;
             } elseif (($data['allowGuestInteractions'] ?? false) === true) {
-                $session = Craft::$app->getSession();
-                $session->open();
-                $vote = Plugin::getInstance()->likesVotes->getByAggregateAndSessionId((int)$data['id'], $session->getId());
+                $vote = Plugin::getInstance()->likesVotes->getByAggregateAndSessionId((int)$data['id'], SecurityHelper::currentGuestToken());
                 $userVote = $vote?->value;
             }
         }
@@ -198,7 +195,7 @@ class TwigService extends Component
 
     public function renderFavorite(mixed $fieldValue, ?array $options = null): Markup|string
     {
-        $data = $this->normalizeFavoritesFieldData($fieldValue);
+        $data = $this->sanitizeWidgetData($this->normalizeFavoritesFieldDataRaw($fieldValue));
         if ($data === null) {
             // Back-compat for older templates that used renderFavorite() for ratings.
             return $this->renderRating($fieldValue, $options);
@@ -218,9 +215,7 @@ class TwigService extends Component
                 $entry = Plugin::getInstance()->favoritesEntries->getByAggregateAndUserId((int)$data['id'], (int)$currentUser->id);
                 $isFavorited = $entry !== null;
             } elseif (($data['allowGuestInteractions'] ?? false) === true) {
-                $session = Craft::$app->getSession();
-                $session->open();
-                $entry = Plugin::getInstance()->favoritesEntries->getByAggregateAndSessionId((int)$data['id'], $session->getId());
+                $entry = Plugin::getInstance()->favoritesEntries->getByAggregateAndSessionId((int)$data['id'], SecurityHelper::currentGuestToken());
                 $isFavorited = $entry !== null;
             }
         }
@@ -269,7 +264,7 @@ class TwigService extends Component
     /**
      * @return array{id?: ?int, elementId?: ?int, siteId?: ?int, fieldId?: ?int, enabled?: bool, scale?: int, icon?: string, emojiIcon?: string, customSvg?: ?string, average?: float, roundedAverage?: float, voteCount?: int, headingText?: ?string, clickToRateText?: ?string, yourRatingText?: ?string, allowGuestRatings?: bool}|null
      */
-    private function normalizeRatingFieldData(mixed $fieldValue): ?array
+    private function normalizeRatingFieldDataRaw(mixed $fieldValue): ?array
     {
         if ($fieldValue instanceof Rating) {
             return [
@@ -319,7 +314,7 @@ class TwigService extends Component
     /**
      * @return array{id?: ?int, elementId?: ?int, siteId?: ?int, fieldId?: ?int, enabled?: bool, icon?: string, emojiIcon?: string, likeEmojiIcon?: string, dislikeEmojiIcon?: string, beforeLikeColor?: string, afterLikeColor?: string, beforeDislikeColor?: string, afterDislikeColor?: string, likeCustomSvg?: ?string, dislikeCustomSvg?: ?string, likeCount?: int, dislikeCount?: int, headingText?: ?string, likeText?: ?string, dislikeText?: ?string, allowGuestInteractions?: bool, allowVoteChange?: bool}|null
      */
-    private function normalizeLikesFieldData(mixed $fieldValue): ?array
+    private function normalizeLikesFieldDataRaw(mixed $fieldValue): ?array
     {
         if ($fieldValue instanceof Like) {
             return [
@@ -381,7 +376,7 @@ class TwigService extends Component
     /**
      * @return array{id?: ?int, elementId?: ?int, siteId?: ?int, fieldId?: ?int, enabled?: bool, icon?: string, emojiIcon?: string, beforeFavoriteColor?: string, afterFavoriteColor?: string, customSvg?: ?string, favoriteCount?: int, headingText?: ?string, favoriteText?: ?string, unfavoriteText?: ?string, isFavorited?: bool, allowGuestInteractions?: bool}|null
      */
-    private function normalizeFavoritesFieldData(mixed $fieldValue): ?array
+    private function normalizeFavoritesFieldDataRaw(mixed $fieldValue): ?array
     {
         if ($fieldValue instanceof Favorite) {
             return [
@@ -426,6 +421,37 @@ class TwigService extends Component
         }
 
         return null;
+    }
+
+    /**
+     * Neutralize values that are rendered without HTML escaping or inside style attributes.
+     *
+     * Custom SVG markup and colors can be supplied by entry editors when editor overrides are enabled,
+     * so they are treated as untrusted: SVGs are passed through Craft's SVG sanitizer and colors must
+     * be plain CSS color values.
+     *
+     * @param array<string, mixed>|null $data
+     * @return array<string, mixed>|null
+     */
+    private function sanitizeWidgetData(?array $data): ?array
+    {
+        if ($data === null) {
+            return null;
+        }
+
+        foreach (['customSvg', 'likeCustomSvg', 'dislikeCustomSvg'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $data[$key] = SecurityHelper::sanitizeSvg($data[$key]);
+            }
+        }
+
+        foreach (['beforeLikeColor', 'afterLikeColor', 'beforeDislikeColor', 'afterDislikeColor', 'beforeFavoriteColor', 'afterFavoriteColor'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $data[$key] = SecurityHelper::sanitizeColor($data[$key]);
+            }
+        }
+
+        return $data;
     }
 
     private function resolveFieldName(?int $fieldId): ?string

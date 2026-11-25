@@ -2,6 +2,7 @@
 
 namespace jtdev\craftengagement\services;
 
+use Craft;
 use craft\base\Component;
 use jtdev\craftengagement\models\RatingAggregate;
 use jtdev\craftengagement\Plugin;
@@ -158,30 +159,34 @@ class RatingAggregateService extends Component
 
     public function forceRecount(int $aggregateId): ?RatingAggregate
     {
-        $aggregate = $this->getById($aggregateId);
-        if ($aggregate === null) {
-            return null;
-        }
+        $db = Craft::$app->getDb();
+        return $db->transaction(function() use ($db, $aggregateId): ?RatingAggregate {
+            $db->createCommand('SELECT [[id]] FROM ' . $db->quoteTableName(RatingAggregateRecord::tableName()) . ' WHERE [[id]] = :id FOR UPDATE', [':id' => $aggregateId])->queryScalar();
+            $aggregate = $this->getById($aggregateId);
+            if ($aggregate === null) {
+                return null;
+            }
 
-        $votes = Plugin::getInstance()->ratingVotes->getByAggregateId($aggregateId);
-        $count = count($votes);
+            $votes = Plugin::getInstance()->ratingVotes->getByAggregateId($aggregateId);
+            $count = count($votes);
 
-        if ($count === 0) {
+            if ($count === 0) {
+                return $this->update($aggregateId, [
+                    'ratingSum' => 0,
+                    'voteCount' => 0,
+                ]);
+            }
+
+            $sum = 0;
+            foreach ($votes as $vote) {
+                $sum += (int)$vote->rating;
+            }
+
             return $this->update($aggregateId, [
-                'ratingSum' => 0,
-                'voteCount' => 0,
+                'ratingSum' => $sum,
+                'voteCount' => $count,
             ]);
-        }
-
-        $sum = 0;
-        foreach ($votes as $vote) {
-            $sum += (int)$vote->rating;
-        }
-
-        return $this->update($aggregateId, [
-            'ratingSum' => $sum,
-            'voteCount' => $count,
-        ]);
+        });
     }
 
     private function recordToModel(RatingAggregateRecord $record): RatingAggregate
